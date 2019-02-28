@@ -1,12 +1,14 @@
 import statistics
 from collections import Counter
 import math
+from random import sample
 
 
 class Example:
-    def __init__(self, read_data, given_label):
+    def __init__(self, read_data, given_label, weight=1):
         self.attributes = read_data
         self.label = given_label
+        self.weight = weight
 
 
 def is_uniform(data_set: list):
@@ -19,7 +21,7 @@ def is_uniform(data_set: list):
 
 class DecisionTree:                                        # possible_values, num_indices, [unknown_mode = false],
     def __init__(self, training_data, max_depth, strategy, possible_values, num_indices,
-                 most_common="Nothing", depth=0):
+                 most_common="Nothing", depth=0, use_random_subset=False, random_subset_size=0):
         """
         Takes in a list of examples and constructs a decision tree out of it.
         :param training_data:
@@ -34,38 +36,48 @@ class DecisionTree:                                        # possible_values, nu
             self.is_leaf = True
             return
         if depth == max_depth:
-            self.prediction = most_common_label(training_data)
+            self.prediction = most_common_label_weighted(training_data)
             self.is_leaf = True
             return
 
         self.is_leaf = False
-        self.data = training_data
         self.children = dict()
-        self.decision_attribute = self.find_decision_attribute(strategy, possible_values, num_indices)
+        self.decision_attribute = DecisionTree.find_decision_attribute(training_data, strategy,
+                                                                       possible_values, num_indices,
+                                                                       use_random_subset, random_subset_size)
         self.is_numeric = self.decision_attribute in num_indices
         if self.is_numeric:
             self.median = possible_values[self.decision_attribute]
-        self.common_label = most_common_label(training_data)
+        self.common_label = most_common_label_weighted(training_data)
         if self.decision_attribute not in num_indices:
             subsets = partition_categorical_data(training_data, self.decision_attribute)
             for value in subsets.keys():
                 self.children[value] = DecisionTree(subsets[value], max_depth, strategy,
-                                                    possible_values, num_indices, self.common_label, depth + 1)
+                                                    possible_values, num_indices, self.common_label, depth + 1,
+                                                    use_random_subset, random_subset_size)
         else:
             subsets = partition_numerical_data(training_data, self.decision_attribute,
                                                possible_values[self.decision_attribute])
             self.children["above"] = DecisionTree(subsets["above"], max_depth, strategy,
-                                                  possible_values, num_indices, self.common_label, depth+1)
+                                                  possible_values, num_indices, self.common_label, depth+1,
+                                                  use_random_subset, random_subset_size)
             self.children["below"] = DecisionTree(subsets["below"], max_depth, strategy,
-                                                  possible_values, num_indices, self.common_label, depth+1)
+                                                  possible_values, num_indices, self.common_label, depth+1,
+                                                  use_random_subset, random_subset_size)
 
     def test(self, test_data):
+        """
+        :param test_data:
+        :return: weighted error proportion
+        """
         total = len(test_data)
+        total_weight = 0
         incorrect = 0
         for example in test_data:
             if not self.predict(example) == example.label:
-                incorrect += 1
-        return incorrect/total
+                incorrect += example.weight
+            total_weight += example.weight
+        return incorrect/total_weight
 
     def predict(self, example):
         if not self.is_leaf:
@@ -83,12 +95,16 @@ class DecisionTree:                                        # possible_values, nu
         else:
             return self.prediction
 
-    def find_decision_attribute(self, strategy, possible_values, num_indices):
+    @staticmethod
+    def find_decision_attribute(training_data, strategy, possible_values, num_indices,
+                                use_random_subset=False, random_subset_size=0):
         best_so_far = 0
         index_of_best_so_far = 0
-        for i in range(len(possible_values)):
-            # heuristic = strategy(i, self.data, possible_values, i in num_indices)
-            heuristic = information_gain(i, self.data, possible_values, i in num_indices, strategy)
+        attr_range = range(len(possible_values))
+        if use_random_subset:
+            attr_range = sample(attr_range, random_subset_size)
+        for i in attr_range:
+            heuristic = information_gain(i, training_data, possible_values, i in num_indices, strategy)
             if heuristic > best_so_far:
                 best_so_far = heuristic
                 index_of_best_so_far = i
@@ -104,6 +120,22 @@ def entropy(subset):
         else:
             label_counts[individual.label] = 1
     total_count = len(subset)
+    for count in label_counts.values():
+        proportion = count/total_count
+        total_entropy -= proportion*math.log(proportion)
+    return total_entropy
+
+
+def entropy_weighted(subset):
+    total_entropy = 0
+    label_counts = dict()
+    total_count = 0
+    for individual in subset:
+        if individual.label in label_counts:
+            label_counts[individual.label] += individual.weight
+        else:
+            label_counts[individual.label] = individual.weight
+        total_count += individual.weight
     for count in label_counts.values():
         proportion = count/total_count
         total_entropy -= proportion*math.log(proportion)
@@ -187,6 +219,22 @@ def most_common_label(example_list: list):
         label_list.append(example.label)
     counter = Counter(label_list)
     return counter.most_common(1)[0][0]
+
+
+def most_common_label_weighted(example_list: list):
+    label_list = dict()
+    biggest_amount = 0
+    biggest_label = ""
+    for example in example_list:
+        label = example.label
+        if label in label_list:
+            label_list[label] += example.weight
+        else:
+            label_list[label] = example.weight
+        if label_list[label] > biggest_amount:
+            biggest_label = label
+            biggest_amount = label_list[label]
+    return biggest_label
 
 
 def most_common_attribute(example_list: list, attr):
@@ -287,7 +335,7 @@ if __name__ == "__main__":
     car_test_err_results_tex = cat_format_string_tex.format("strat", "entropy", "gin", "max")
 
     for i in range(1, 7):
-        tree_ent = DecisionTree(training_examples_car, i, entropy, car_val, car_num)
+        tree_ent = DecisionTree(training_examples_car, i, entropy_weighted, car_val, car_num)
         tree_gin = DecisionTree(training_examples_car, i, gini, car_val, car_num)
         tree_max = DecisionTree(training_examples_car, i, max_error, car_val, car_num)
 
