@@ -82,8 +82,8 @@ for i in range(100):
     for example in testing_examples_bank:
         predictor_results_bag.append(1 if bag_i.evaluate(example, NUM_TREES) == "yes" else 0)
         predictor_results_forest.append(1 if forest_i.evaluate(example, NUM_TREES) == "yes" else 0)
-        predictor_results_tree.append(1 if tree_i.predict(example) == "yes" else 0)
-        predictor_results_rnd_tree.append(1 if rnd_tree_i.predict(example) == "yes" else 0)
+        predictor_results_tree.append(1 if tree_i.check(example) == "yes" else 0)
+        predictor_results_rnd_tree.append(1 if rnd_tree_i.check(example) == "yes" else 0)
     bags.append(predictor_results_bag)
     forests.append(predictor_results_forest)
     trees.append(predictor_results_tree)

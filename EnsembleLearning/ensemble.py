@@ -12,7 +12,7 @@ class BoardMember:
         self.shares = shares
 
     def vote(self, example):
-        answer = self.tree.predict(example)
+        answer = self.tree.check(example)
         return answer, self.shares
 
 
